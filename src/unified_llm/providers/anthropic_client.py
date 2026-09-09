@@ -15,17 +15,23 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 
+from pydantic import SecretStr
+
 from ..base import BaseLLMClient
 from ..schemas import ChatMessage, ModelConfig, Usage
 
 
 class AnthropicClient(BaseLLMClient):
-    def __init__(self, config: ModelConfig, api_key: str, base_url: str | None = None) -> None:
+    def __init__(self, config: ModelConfig, api_key: SecretStr | str,
+                 base_url: str | None = None) -> None:
         super().__init__(config, api_key, base_url)
 
         from anthropic import AsyncAnthropic
 
-        self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, max_retries=0)
+        # `.get_secret_value()` en el único punto donde hace falta: el SDK.
+        self._client = AsyncAnthropic(
+            api_key=self._api_key.get_secret_value(), base_url=base_url, max_retries=0
+        )
 
     def _payload(self, messages: Sequence[ChatMessage]) -> dict:
         system_parts = [m.content for m in messages if m.role == "system"]

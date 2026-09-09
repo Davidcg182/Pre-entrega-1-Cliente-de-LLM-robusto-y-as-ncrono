@@ -11,6 +11,8 @@ import asyncio
 import random
 from collections.abc import AsyncIterator, Sequence
 
+from pydantic import SecretStr
+
 from ..base import BaseLLMClient
 from ..schemas import ChatMessage, ModelConfig, Usage
 
@@ -32,7 +34,7 @@ class FakeClient(BaseLLMClient):
     def __init__(
         self,
         config: ModelConfig,
-        api_key: str = "",
+        api_key: SecretStr | str = "",
         base_url: str | None = None,
         *,
         fail_times: int = 0,

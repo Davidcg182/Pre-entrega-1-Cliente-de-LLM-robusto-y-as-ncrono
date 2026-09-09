@@ -20,6 +20,8 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 
+from pydantic import SecretStr
+
 from .errors import classify
 from .schemas import ChatMessage, ErrorKind, ModelConfig, ModelResponse, StreamChunk, Usage
 
@@ -41,9 +43,13 @@ def _backoff_delay(attempt: int) -> float:
 class BaseLLMClient(ABC):
     """Interfaz común. Los adaptadores sólo implementan los dos métodos `_raw`."""
 
-    def __init__(self, config: ModelConfig, api_key: str, base_url: str | None = None) -> None:
+    def __init__(self, config: ModelConfig, api_key: SecretStr | str,
+                 base_url: str | None = None) -> None:
         self.config = config
-        self._api_key = api_key
+        # La clave se guarda ENVUELTA y se desenvuelve sólo al construir el
+        # cliente del SDK. Así no puede aparecer en un repr, un log ni un
+        # traceback de este objeto por descuido de nadie.
+        self._api_key = api_key if isinstance(api_key, SecretStr) else SecretStr(api_key)
         self._base_url = base_url
 
     # ------------------------------------------------------------------

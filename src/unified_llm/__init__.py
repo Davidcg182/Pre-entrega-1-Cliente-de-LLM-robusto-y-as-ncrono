@@ -1,6 +1,7 @@
 """Unified Async LLM Client — Pre-entrega 1, Módulo 1."""
 
 from .manager import AsyncLLMManager, MissingAPIKeyError
+from .settings import Settings
 from .schemas import (
     ChatMessage,
     ErrorInfo,
@@ -15,6 +16,7 @@ from .schemas import (
 __all__ = [
     "AsyncLLMManager",
     "MissingAPIKeyError",
+    "Settings",
     "ChatMessage",
     "ErrorInfo",
     "ErrorKind",

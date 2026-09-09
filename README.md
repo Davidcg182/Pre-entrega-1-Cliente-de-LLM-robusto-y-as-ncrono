@@ -49,6 +49,7 @@ es lo que impide que cada proveedor acabe con su propio `retry` sutilmente disti
 ```
 src/unified_llm/
 ├── schemas.py     Pydantic: ChatMessage, ModelConfig, ModelResponse, StreamChunk, ErrorInfo
+├── settings.py    pydantic-settings: entorno validado y claves en SecretStr
 ├── errors.py      Traducción de excepciones de SDK → taxonomía propia (ErrorKind)
 ├── base.py        BaseLLMClient: timeout, retry, contrato uniforme
 ├── manager.py     AsyncLLMManager: factory por configuración + from_env()
@@ -68,7 +69,7 @@ pip install -r requirements.txt                      # o: uv pip install -r requ
 cp .env.example .env
 ```
 
-Dependencias: `openai`, `anthropic`, `pydantic`, `python-dotenv`.
+Dependencias: `openai`, `anthropic`, `pydantic`, `pydantic-settings`, `python-dotenv`.
 
 ---
 
@@ -89,6 +90,22 @@ Todas viven en `.env` (que está en `.gitignore`; la plantilla versionada es `.e
 | `LLM_TIMEOUT_S` | no | `60` | Presupuesto total de una llamada no-streaming |
 | `LLM_STREAM_IDLE_TIMEOUT_S` | no | `30` | Silencio máximo **entre** tokens |
 | `LLM_MAX_RETRIES` | no | `2` | Reintentos ante fallo recuperable |
+
+### Las claves nunca viajan como `str`
+
+`Settings` (pydantic-settings) las carga en `SecretStr`, que sólo entrega su valor a quien llama
+explícitamente a `.get_secret_value()` — y eso ocurre en un único punto de todo el código: al
+construir el cliente del SDK. En cualquier otro sitio, la clave se muestra enmascarada:
+
+```
+  openai_api_key    : SecretStr('**********')
+```
+
+No es cosmética. Un `str` con una API key acaba solo en un `repr`, en un log de excepción o en un
+reporte de errores sin que nadie lo haya decidido; `SecretStr` corta ese camino por defecto.
+
+Sólo se exige la clave del **proveedor activo**: pedir las dos obligaría a tener cuenta en ambos
+para probar uno, y exigir credenciales que no se usan empuja a rellenarlas con basura.
 
 Una configuración inválida falla **al arrancar**, no en la primera petición:
 
@@ -120,8 +137,11 @@ Salida real contra la API (recogida completa en `salida-validacion.txt`):
 La entropía es la medida física que cuantifica el grado de desorden, aleatoriedad
 y dispersión de la energía en un sistema. […]
 
-  TTFT=6.595s · total=7.06s · 5 fragmentos
+  TTFT=14.614s · total=14.94s · 4 fragmentos
 ```
+
+Ese TTFT de 14,6 s sobre 14,94 s totales no es una anomalía: es un modelo de razonamiento
+pensando antes de hablar. El 98 % de la espera ocurre **antes** del primer token.
 
 ### Probar sin pagar
 

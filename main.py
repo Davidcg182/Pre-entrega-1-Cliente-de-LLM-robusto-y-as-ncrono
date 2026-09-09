@@ -27,6 +27,7 @@ from unified_llm import (  # noqa: E402
     MissingAPIKeyError,
     ModelConfig,
     Provider,
+    Settings,
 )
 
 PREGUNTA = "¿Qué es la entropía?"
@@ -39,6 +40,19 @@ MENSAJES = [
 
 def titulo(texto: str) -> None:
     print(f"\n{'=' * 68}\n{texto}\n{'=' * 68}")
+
+
+def mostrar_configuracion(settings: Settings) -> None:
+    """Evidencia de que la clave no se filtra ni cuando se imprime a propósito."""
+    titulo("0. CONFIGURACIÓN VALIDADA")
+    print(f"  proveedor         : {settings.llm_provider.value}")
+    print(f"  modelo            : {settings.to_model_config().model}")
+    print(f"  openai_api_key    : {settings.openai_api_key!r}")
+    print(f"  anthropic_api_key : {settings.anthropic_api_key!r}")
+    print(f"  temperature       : {settings.llm_temperature} · max_tokens: {settings.llm_max_tokens}")
+    print("\n  Arriba no hay ninguna clave: SecretStr sólo la entrega a quien llama")
+    print("  explícitamente a .get_secret_value(), y eso ocurre en un único punto,")
+    print("  al construir el cliente del SDK.")
 
 
 async def modo_completo(manager: AsyncLLMManager) -> None:
@@ -108,26 +122,28 @@ async def main() -> None:
 
     load_dotenv()
 
-    overrides = {}
-    if args.provider:
-        import os
-        os.environ["LLM_PROVIDER"] = args.provider
-        os.environ.pop("LLM_MODEL", None)
+    # La sobrescritura viaja al constructor de Settings, no al entorno del
+    # proceso: pydantic-settings lee el fichero .env, así que manipular
+    # os.environ no bastaría para cambiar de proveedor.
+    sobrescrituras = {"llm_provider": args.provider, "llm_model": None} if args.provider else {}
 
     # Los errores de CONFIGURACIÓN se tratan aquí, y no dentro del cliente,
     # porque no son fallos de una llamada: son un despliegue mal hecho. Deben
     # matar el proceso al arrancar (fail fast), pero con un mensaje legible en
     # lugar de un traceback.
     try:
-        manager = AsyncLLMManager.from_env(**overrides)
+        settings = Settings(**sobrescrituras)
+        mostrar_configuracion(settings)
+        manager = AsyncLLMManager.from_settings(settings)
     except MissingAPIKeyError as exc:
         print(f"✗ CONFIGURACIÓN: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     except ValidationError as exc:
         print("✗ CONFIGURACIÓN inválida en el .env:", file=sys.stderr)
         for error in exc.errors():
-            campo = ".".join(str(part) for part in error["loc"])
-            print(f"    {campo}: {error['msg']} (recibido: {error['input']!r})", file=sys.stderr)
+            campo = ".".join(str(part) for part in error["loc"]) or "(configuración)"
+            detalle = error["msg"].removeprefix("Value error, ")
+            print(f"    {campo}: {detalle}", file=sys.stderr)
         raise SystemExit(2) from None
 
     async with manager:

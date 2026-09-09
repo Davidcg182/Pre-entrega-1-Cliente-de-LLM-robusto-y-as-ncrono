@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 
+from pydantic import SecretStr
+
 from ..base import BaseLLMClient
 from ..schemas import ChatMessage, ModelConfig, Usage
 
 
 class OpenAIClient(BaseLLMClient):
-    def __init__(self, config: ModelConfig, api_key: str, base_url: str | None = None) -> None:
+    def __init__(self, config: ModelConfig, api_key: SecretStr | str,
+                 base_url: str | None = None) -> None:
         super().__init__(config, api_key, base_url)
 
         # Import perezoso: permite usar el paquete con sólo un SDK instalado.
@@ -23,7 +26,10 @@ class OpenAIClient(BaseLLMClient):
         # `max_retries=0`: el retry lo gobierna la clase base. Dos capas de
         # reintento se multiplican (3 x 3 = 9 llamadas) y la de arriba pierde
         # el control del presupuesto de latencia.
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, max_retries=0)
+        # `.get_secret_value()` en el único punto donde hace falta: el SDK.
+        self._client = AsyncOpenAI(
+            api_key=self._api_key.get_secret_value(), base_url=base_url, max_retries=0
+        )
 
     def _payload(self, messages: Sequence[ChatMessage]) -> dict:
         return {

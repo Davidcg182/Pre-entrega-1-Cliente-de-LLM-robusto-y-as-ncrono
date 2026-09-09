@@ -15,9 +15,12 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Sequence
 
+from pydantic import SecretStr
+
 from .base import BaseLLMClient
 from .providers import AnthropicClient, FakeClient, OpenAIClient
 from .schemas import ChatMessage, ModelConfig, ModelResponse, Provider, StreamChunk
+from .settings import Settings
 
 _REGISTRY: dict[Provider, type[BaseLLMClient]] = {
     Provider.OPENAI: OpenAIClient,
@@ -56,7 +59,7 @@ class MissingAPIKeyError(RuntimeError):
 class AsyncLLMManager:
     """Fachada asíncrona sobre el proveedor configurado."""
 
-    def __init__(self, config: ModelConfig, api_key: str | None = None,
+    def __init__(self, config: ModelConfig, api_key: SecretStr | str | None = None,
                  base_url: str | None = None, **client_kwargs) -> None:
         self.config = config
 
@@ -71,9 +74,12 @@ class AsyncLLMManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _key_from_env(provider: Provider) -> str:
+    def _key_from_env(provider: Provider) -> SecretStr:
+        """Camino de construcción directa. `from_env()` usa `Settings`, que
+        además valida tipos y rangos; esto es el mínimo para quien instancia el
+        manager a mano con una config propia."""
         if provider is Provider.FAKE:
-            return ""
+            return SecretStr("")
         var = _API_KEY_ENV[provider]
         key = os.getenv(var, "").strip()
         if not key:
@@ -81,7 +87,7 @@ class AsyncLLMManager:
                 f"Falta la variable de entorno {var} para el proveedor '{provider}'. "
                 f"Copia .env.example a .env y rellénala."
             )
-        return key
+        return SecretStr(key)
 
     @staticmethod
     def _url_from_env(provider: Provider) -> str | None:
@@ -89,20 +95,28 @@ class AsyncLLMManager:
         return (os.getenv(var, "").strip() or None) if var else None
 
     @classmethod
-    def from_env(cls, **overrides) -> "AsyncLLMManager":
-        """Construye leyendo el entorno. Pydantic valida los rangos aquí mismo:
-        un `LLM_TEMPERATURE=5` falla al arrancar, no en la primera petición."""
-        provider = Provider(os.getenv("LLM_PROVIDER", "fake").strip().lower())
-        config = ModelConfig(
-            provider=provider,
-            model=os.getenv("LLM_MODEL", "").strip() or _DEFAULT_MODEL[provider],
-            temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "512")),
-            timeout_s=float(os.getenv("LLM_TIMEOUT_S", "30")),
-            stream_idle_timeout_s=float(os.getenv("LLM_STREAM_IDLE_TIMEOUT_S", "15")),
-            max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
+    def from_settings(cls, settings: Settings, **overrides) -> "AsyncLLMManager":
+        """Construye a partir de una configuración ya validada.
+
+        Se separa de `from_env()` para que quien llama pueda construir el
+        `Settings` a su manera —con sobrescrituras, o en un test— sin que este
+        método vuelva a leer el entorno por su cuenta. Un `Settings` por
+        proceso, y una sola fuente de verdad."""
+        return cls(
+            settings.to_model_config(),
+            api_key=settings.api_key,
+            base_url=settings.base_url,
+            **overrides,
         )
-        return cls(config, **overrides)
+
+    @classmethod
+    def from_env(cls, **overrides) -> "AsyncLLMManager":
+        """Atajo: lee y valida el entorno, y construye.
+
+        Toda la validación ocurre aquí, antes de la primera petición: tipos,
+        rangos, presencia de la clave del proveedor activo. Y la clave llega
+        envuelta en `SecretStr`, no como `str` suelto."""
+        return cls.from_settings(Settings(), **overrides)
 
     # ------------------------------------------------------------------
     # Uso
