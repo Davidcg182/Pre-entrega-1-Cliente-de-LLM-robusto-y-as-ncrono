@@ -1,0 +1,23 @@
+
+====================================================================
+1. MODO COMPLETO — AsyncLLMManager(provider=openai, model='gemini-3.6-flash')
+====================================================================
+La entropía es la magnitud física que mide el grado de desorden y aleatoriedad presente en un sistema. Nos ayuda a entender por qué los procesos naturales ocurren en un solo sentido, como cuando un vaso de cristal se rompe pero jamás se reconstruye por sí solo. En última instancia, representa la tendencia inevitable del universo a pasar del orden al caos, marcando la dirección de la flecha del tiempo.
+
+  latencia=6.658s · tokens in/out=22/84
+
+====================================================================
+2. MODO STREAMING — AsyncLLMManager(provider=openai, model='gemini-3.6-flash')
+====================================================================
+La entropía es la medida física que cuantifica el grado de desorden, aleatoriedad y dispersión de la energía en un sistema. En la vida cotidiana, explica por qué la naturaleza tiende espontáneamente al caos: es la razón por la que un huevo se rompe fácilmente, pero jamás se reconstruye solo. Esta inevitable tendencia del universo hacia el desorden es lo que define la "flecha del tiempo", marcando una dirección clara entre el pasado y el futuro.
+
+  TTFT=6.595s · total=7.06s · 5 fragmentos
+  El TTFT es lo que percibe el usuario; el total, lo que cuesta la respuesta.
+
+====================================================================
+3. RESILIENCIA — 429 simulado y reintento con backoff + jitter
+====================================================================
+ok=True · recuperado en 0.90s (incluye las esperas del backoff)
+
+  Y ahora el mismo fallo sin reintentos suficientes:
+  ok=False · kind=rate_limit · retryable=True · sin excepción propagada

@@ -1,4 +1,9 @@
-openai>=1.60
-anthropic>=0.40
+# `openai` 2.x y `anthropic` 1.x exigen httpx2 (rama 2.x). En esa rama,
+# httpcore2 2.12.0 falla al finalizar el cuerpo de una respuesta en streaming
+# y ensucia stderr con un `RuntimeError: generator didn't stop after athrow()`
+# durante el apagado del event loop. La salida es correcta, pero el ruido es
+# indistinguible de un crash. Verificado: con la pila estable no ocurre.
+openai>=1.60,<2
+anthropic>=0.40,<1
 pydantic>=2.9
 python-dotenv>=1.0

@@ -85,9 +85,9 @@ Todas viven en `.env` (que está en `.gitignore`; la plantilla versionada es `.e
 | `OPENAI_BASE_URL` | no | — | Endpoint alternativo compatible con OpenAI |
 | `ANTHROPIC_BASE_URL` | no | — | Endpoint alternativo de Anthropic |
 | `LLM_TEMPERATURE` | no | `0.7` | Validada en `[0, 2]` |
-| `LLM_MAX_TOKENS` | no | `512` | Validada `> 0` |
-| `LLM_TIMEOUT_S` | no | `30` | Presupuesto total de una llamada no-streaming |
-| `LLM_STREAM_IDLE_TIMEOUT_S` | no | `15` | Silencio máximo **entre** tokens |
+| `LLM_MAX_TOKENS` | no | `1024` | Validada `> 0` |
+| `LLM_TIMEOUT_S` | no | `60` | Presupuesto total de una llamada no-streaming |
+| `LLM_STREAM_IDLE_TIMEOUT_S` | no | `30` | Silencio máximo **entre** tokens |
 | `LLM_MAX_RETRIES` | no | `2` | Reintentos ante fallo recuperable |
 
 Una configuración inválida falla **al arrancar**, no en la primera petición:
@@ -111,14 +111,16 @@ python main.py --demo-errores     # además, fuerza un 429 y enseña el backoff
 
 El script lanza la misma pregunta —«¿Qué es la entropía?»— en los dos modos exigidos:
 
+Salida real contra la API (recogida completa en `salida-validacion.txt`):
+
 ```
 ====================================================================
-2. MODO STREAMING — AsyncLLMManager(provider=fake, model='fake-1')
+2. MODO STREAMING — AsyncLLMManager(provider=openai, model='gemini-3.6-flash')
 ====================================================================
-La entropía es una medida del desorden o, con más precisión, del número de
-microestados compatibles con un estado macroscópico dado. […]
+La entropía es la medida física que cuantifica el grado de desorden, aleatoriedad
+y dispersión de la energía en un sistema. […]
 
-  TTFT=0.415s · total=1.74s · 44 fragmentos
+  TTFT=6.595s · total=7.06s · 5 fragmentos
 ```
 
 ### Probar sin pagar
@@ -129,10 +131,20 @@ El SDK de OpenAI habla un **protocolo**, no sólo con OpenAI. Con una clave grat
 
 ```dotenv
 LLM_PROVIDER=openai
-LLM_MODEL=gemini-2.5-flash
-OPENAI_API_KEY=AIza...
+LLM_MODEL=gemini-3.6-flash
+OPENAI_API_KEY=<tu clave>
 OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 ```
+
+**Si el proveedor es un modelo de razonamiento**, dos parámetros por defecto se
+quedan cortos, y ambos fallos son confusos porque no parecen fallos:
+
+- `max_tokens` se consume **pensando**. Con 512, la respuesta llegaba truncada con
+  `finish_reason=length` tras una sola frase, y parte del razonamiento se filtraba
+  al contenido. El presupuesto de salida no es sólo lo que lees.
+- El **TTFT sube**: el modelo piensa antes de emitir el primer token. Con un timeout
+  de inactividad de 15 s se cortaban streams perfectamente sanos. Por eso el valor
+  por defecto es 30 s.
 
 ---
 
@@ -181,3 +193,10 @@ hace lo que dice.
 - **Sin tests automatizados.** `FakeClient` está diseñado para hacerlos triviales, pero el
   entregable no los exige.
 - El conteo de tokens en `FakeClient` es una aproximación por caracteres, no un tokenizador.
+- **Dependencias fijadas a `openai<2` y `anthropic<1`** a propósito. Las versiones
+  mayores actuales arrastran `httpx2`, y `httpcore2 2.12.0` falla al finalizar el
+  cuerpo de una respuesta en streaming: ensucia stderr con un `RuntimeError:
+  generator didn't stop after athrow()` al apagar el event loop. La salida es
+  correcta, pero el ruido es indistinguible de un crash. Comprobado que no ocurre
+  con la pila estable, y que no procede de este código: el SDK usado directamente,
+  sin esta capa, lo reproduce igual.

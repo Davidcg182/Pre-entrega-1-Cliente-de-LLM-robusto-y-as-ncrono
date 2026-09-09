@@ -111,24 +111,34 @@ class BaseLLMClient(ABC):
         started = time.perf_counter()
         ttft_s: float | None = None
 
-        iterator = self._stream_raw(messages).__aiter__()
-        while True:
-            try:
-                async with asyncio.timeout(self.config.stream_idle_timeout_s):
-                    token = await iterator.__anext__()
-            except StopAsyncIteration:
-                break
-            except Exception as exc:  # noqa: BLE001
-                yield StreamChunk(done=True, error=classify(exc, self.config.provider))
-                return
+        # El generador del proveedor se cierra en `finally`, SIEMPRE: si se deja
+        # que lo recoja el recolector de basura, el `GeneratorExit` se inyecta
+        # en un punto arbitrario del stream de httpx y revienta el cierre del
+        # pool de conexiones. Cerrarlo aquí lo hace en un punto controlado,
+        # tanto si el consumidor agota el stream como si abandona a mitad.
+        source = self._stream_raw(messages)
+        iterator = source.__aiter__()
+        try:
+            while True:
+                try:
+                    async with asyncio.timeout(self.config.stream_idle_timeout_s):
+                        token = await iterator.__anext__()
+                except StopAsyncIteration:
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    yield StreamChunk(done=True, error=classify(exc, self.config.provider))
+                    return
 
-            if ttft_s is None:
-                ttft_s = round(time.perf_counter() - started, 3)
-                yield StreamChunk(text=token, ttft_s=ttft_s)
-            else:
-                yield StreamChunk(text=token)
+                if ttft_s is None:
+                    ttft_s = round(time.perf_counter() - started, 3)
+                    yield StreamChunk(text=token, ttft_s=ttft_s)
+                else:
+                    yield StreamChunk(text=token)
 
-        yield StreamChunk(done=True)
+            yield StreamChunk(done=True)
+        finally:
+            if (aclose := getattr(source, "aclose", None)) is not None:
+                await aclose()
 
     async def __aenter__(self):
         return self

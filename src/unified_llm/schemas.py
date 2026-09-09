@@ -44,15 +44,19 @@ class ModelConfig(BaseModel):
     model: str = Field(min_length=1)
 
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=512, gt=0, le=32_000)
+    max_tokens: int = Field(default=1024, gt=0, le=32_000)
 
     # --- Resiliencia (ver README §Resiliencia) ---
-    timeout_s: float = Field(default=30.0, gt=0)
+    timeout_s: float = Field(default=60.0, gt=0)
     """Presupuesto total de una llamada NO-streaming."""
 
-    stream_idle_timeout_s: float = Field(default=15.0, gt=0)
+    stream_idle_timeout_s: float = Field(default=30.0, gt=0)
     """Silencio máximo tolerado ENTRE tokens. No es un límite total: una
-    respuesta larga y sana puede tardar minutos y no debe cortarse por eso."""
+    respuesta larga y sana puede tardar minutos y no debe cortarse por eso.
+
+    Ojo con los modelos de razonamiento: piensan ANTES del primer token, así
+    que el hueco inicial puede superar los 15 s sin que nada esté roto. Con
+    gemini-3.6-flash, 15 s cortaba streams sanos; 30 s es el mínimo sensato."""
 
     max_retries: int = Field(default=2, ge=0, le=5)
 

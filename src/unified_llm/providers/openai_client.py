@@ -51,12 +51,15 @@ class OpenAIClient(BaseLLMClient):
         stream = await self._client.chat.completions.create(
             **self._payload(messages), stream=True
         )
-        async for event in stream:
-            if not event.choices:
-                continue
-            delta = event.choices[0].delta
-            if (text := getattr(delta, "content", None)):
-                yield text
+        # `async with` sobre el AsyncStream: libera la conexión HTTP aunque el
+        # consumidor deje de leer a mitad (un usuario que cierra la pestaña).
+        async with stream:
+            async for event in stream:
+                if not event.choices:
+                    continue
+                delta = event.choices[0].delta
+                if (text := getattr(delta, "content", None)):
+                    yield text
 
     async def aclose(self) -> None:
         await self._client.close()
